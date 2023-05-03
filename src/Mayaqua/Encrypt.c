@@ -2602,28 +2602,38 @@ void AddKeyUsageX509(EXTENDED_KEY_USAGE *ex, int nid)
 		sk_ASN1_OBJECT_push(ex, obj);
 	}
 }
-X509_EXTENSION *NewExtendedKeyUsageForX509()
+X509_EXTENSION *NewExtendedKeyUsageForX509(bool root_cert)
 {
 	EXTENDED_KEY_USAGE *ex = sk_ASN1_OBJECT_new_null();
 	X509_EXTENSION *ret;
 
-	AddKeyUsageX509(ex, NID_server_auth);
-	AddKeyUsageX509(ex, NID_client_auth);
-	AddKeyUsageX509(ex, NID_code_sign);
-	AddKeyUsageX509(ex, NID_email_protect);
-	AddKeyUsageX509(ex, NID_ipsecEndSystem);
-	AddKeyUsageX509(ex, NID_ipsecTunnel);
-	AddKeyUsageX509(ex, NID_ipsecUser);
-	AddKeyUsageX509(ex, NID_time_stamp);
-	AddKeyUsageX509(ex, NID_OCSP_sign);
+	if (root_cert)
+	{
+		AddKeyUsageX509(ex, NID_server_auth);
+		AddKeyUsageX509(ex, NID_client_auth);
+		AddKeyUsageX509(ex, NID_code_sign);
+		AddKeyUsageX509(ex, NID_email_protect);
+		AddKeyUsageX509(ex, NID_ipsecEndSystem);
+		AddKeyUsageX509(ex, NID_ipsecTunnel);
+		AddKeyUsageX509(ex, NID_ipsecUser);
+		AddKeyUsageX509(ex, NID_time_stamp);
+		AddKeyUsageX509(ex, NID_OCSP_sign);
+	}
+	else
+	{
+		AddKeyUsageX509(ex, NID_server_auth);
+		AddKeyUsageX509(ex, NID_client_auth);
+		AddKeyUsageX509(ex, NID_ipsecEndSystem);
+		AddKeyUsageX509(ex, NID_ipsecTunnel);
+		AddKeyUsageX509(ex, NID_ipsecUser);
+	}
 
 	ret = X509V3_EXT_i2d(NID_ext_key_usage, 0, ex);
 
 	sk_ASN1_OBJECT_pop_free(ex, ASN1_OBJECT_free);
 
 	return ret;
-}
-void BitStringSetBit(ASN1_BIT_STRING *str, int bit)
+}void BitStringSetBit(ASN1_BIT_STRING *str, int bit)
 {
 	// Validate arguments
 	if (str == NULL)
@@ -2633,7 +2643,7 @@ void BitStringSetBit(ASN1_BIT_STRING *str, int bit)
 
 	ASN1_BIT_STRING_set_bit(str, bit, 1);
 }
-X509_EXTENSION *NewBasicKeyUsageForX509()
+X509_EXTENSION *NewBasicKeyUsageForX509(bool root_cert)
 {
 	X509_EXTENSION *ret = NULL;
 	ASN1_BIT_STRING *str;
@@ -2641,13 +2651,21 @@ X509_EXTENSION *NewBasicKeyUsageForX509()
 	str = ASN1_BIT_STRING_new();
 	if (str != NULL)
 	{
-		BitStringSetBit(str, 0);	// KU_DIGITAL_SIGNATURE
-		BitStringSetBit(str, 1);	// KU_NON_REPUDIATION
-		BitStringSetBit(str, 2);	// KU_KEY_ENCIPHERMENT
-		BitStringSetBit(str, 3);	// KU_DATA_ENCIPHERMENT
-		//BitStringSetBit(str, 4);	// KU_KEY_AGREEMENT
-		BitStringSetBit(str, 5);	// KU_KEY_CERT_SIGN
-		BitStringSetBit(str, 6);	// KU_CRL_SIGN
+		if (root_cert)
+		{
+			BitStringSetBit(str, 0);	// KU_DIGITAL_SIGNATURE
+			BitStringSetBit(str, 1);	// KU_NON_REPUDIATION
+			BitStringSetBit(str, 2);	// KU_KEY_ENCIPHERMENT
+			BitStringSetBit(str, 3);	// KU_DATA_ENCIPHERMENT
+			//BitStringSetBit(str, 4);	// KU_KEY_AGREEMENT
+			BitStringSetBit(str, 5);	// KU_KEY_CERT_SIGN
+			BitStringSetBit(str, 6);	// KU_CRL_SIGN
+		}
+		else
+		{
+			BitStringSetBit(str, 0);	// KU_DIGITAL_SIGNATURE
+			BitStringSetBit(str, 2);	// KU_KEY_ENCIPHERMENT
+		}
 
 		ret = X509V3_EXT_i2d(NID_key_usage, 0, str);
 
@@ -2771,7 +2789,7 @@ X509 *NewX509Ex(K *pub, K *priv, X *ca, NAME *name, UINT days, X_SERIAL *serial,
 */
 
 	// Basic usage
-	busage = NewBasicKeyUsageForX509();
+	busage = NewBasicKeyUsageForX509(false);
 	if (busage != NULL)
 	{
 		X509_add_ext(x509, busage, -1);
@@ -2779,7 +2797,7 @@ X509 *NewX509Ex(K *pub, K *priv, X *ca, NAME *name, UINT days, X_SERIAL *serial,
 	}
 
 	// EKU
-	eku = NewExtendedKeyUsageForX509();
+	eku = NewExtendedKeyUsageForX509(false);
 	if (eku != NULL)
 	{
 		X509_add_ext(x509, eku, -1);
@@ -2912,7 +2930,7 @@ X509 *NewRootX509(K *pub, K *priv, NAME *name, UINT days, X_SERIAL *serial)
 	X509_EXTENSION_free(ex);
 
 	// Basic usage
-	busage = NewBasicKeyUsageForX509();
+	busage = NewBasicKeyUsageForX509(true);
 	if (busage != NULL)
 	{
 		X509_add_ext(x509, busage, -1);
@@ -2920,7 +2938,7 @@ X509 *NewRootX509(K *pub, K *priv, NAME *name, UINT days, X_SERIAL *serial)
 	}
 
 	// EKU
-	eku = NewExtendedKeyUsageForX509();
+	eku = NewExtendedKeyUsageForX509(true);
 	if (eku != NULL)
 	{
 		X509_add_ext(x509, eku, -1);
@@ -5066,6 +5084,8 @@ void InitCryptLibrary()
 	ossl_provider_default = OSSL_PROVIDER_load(NULL, "default");
 #endif
 
+	GetSslLibVersion(NULL, 0);
+
 	ERR_load_crypto_strings();
 	SSL_load_error_strings();
 
@@ -6945,6 +6965,60 @@ crypto_aead_chacha20poly1305_ietf_encrypt(unsigned char *c,
 		*clen_p = clen;
 	}
 	return ret;
+}
+
+static char ssl_version_cache[MAX_PATH] = CLEAN;
+
+void GetSslLibVersion(char *str, UINT size)
+{
+	if (IsEmptyStr(ssl_version_cache))
+	{
+		GetSslLibVersion_Internal(ssl_version_cache, sizeof(ssl_version_cache));
+	}
+
+	StrCpy(str, size, ssl_version_cache);
+}
+
+void GetSslLibVersion_Internal(char *str, UINT size)
+{
+	char tmp[MAX_PATH] = CLEAN;
+	UINT verint = 0;
+	UINT ver_major = 0;
+	UINT ver_minor = 0;
+	UINT ver_fix = 0;
+	UINT ver_patch = 0;
+	if (str == NULL)
+	{
+		return;
+	}
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+	Format(tmp, sizeof(tmp), "OpenSSL <= 1.0.2");
+#else	// OPENSSL_VERSION_NUMBER
+	verint = OpenSSL_version_num();
+
+	ver_major = (verint >> 28) & 0x0F;
+	ver_minor = (verint >> 20) & 0xFF;
+	ver_fix = (verint >> 12) & 0xFF;
+	ver_patch = (verint >> 4) & 0xFF;
+
+	if (ver_major >= 3)
+	{
+		Format(tmp, sizeof(tmp), "OpenSSL %u.%u.%u", ver_major, ver_minor, ver_patch);
+	}
+	else
+	{
+		char c = 0;
+		if (ver_patch >= 1)
+		{
+			c = 'a' + (ver_patch - 1);
+		}
+		Format(tmp, sizeof(tmp), "OpenSSL %u.%u.%u%c", ver_major, ver_minor, ver_fix, c);
+	}
+
+#endif	// OPENSSL_VERSION_NUMBER
+
+	StrCpy(str, size, tmp);
 }
 
 // RFC 8439: ChaCha20-Poly1305-IETF Encryption with AEAD
